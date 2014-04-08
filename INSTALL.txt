@@ -1,0 +1,48 @@
+Houseed is a translation layer between a Houdini scene and an appleseed project file. In Houdini slang, houseed is a soho script.
+
+
+Bugs: plenty!
+- Basic support for lights.
+- osl menus are not translated properly.
+- Probably a lot of missing appleseed parameters on the render node.
+- Porbably a lot of missing parameters for camera and geometry.
+- Osl coshadares don't work.
+- Velocity blur is not working.
+- All geometry in the scene is exported. Non polygon objects will not be translated
+  correctly. appleseed can only read the obj wavefront format at the moment.
+
+
+Installing houseed:
+- Rename the houdini/python2.xlibs and houdini/soho/puthon2.x directories to the
+  python version houdini uses on your system. This will either be python2.6 for
+  Houdini12.x or python2.7 for houdini13.
+- Copy the directory houdini to the directory where Houdini is installed ($HFS)
+- Unfortunately to get a good integration you need to edit some files in the
+  houdini directory:
+
+    * Add the following line to $HH/Renderers:
+
+    // AppleSeed
+    "AppleSeed 1.0"                 "appleseed"     "appleseed"
+
+    * Add the following line at the end of the theRendererKeywords dictionary in
+    $HH/pythgon2.xlibs/defaulttools.py:
+
+    "osl" : "appleseed"
+
+    Make sure there is a , at the line above the one just added.
+
+- Copy the otl/AppleseedROP.otl to some directory Houdini uses to read digital assets
+  from.
+- To use openshadinglanguage shaders copy the osl2otl.py script in bin to $HFS/bin.
+  Two required libraries are in the houdini/python2.xlibs directory.
+- Install the AppleseedROP digital asset.
+- In houdini go to Edit -> preferences -> rendering and tick on appleseed. Unfortunatly
+  you porobably have to do this every time you start houdini. Appleseed will render with-
+  out setting this but adding shaders or parameters to objects and cameras will probably
+  not work.
+
+
+Thanks to:
+Jon for helping out with the license and the beta testing.
+Francois for making appleseed.

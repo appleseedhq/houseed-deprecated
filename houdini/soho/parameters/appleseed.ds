@@ -1,0 +1,42 @@
+//
+// Houdini parameters for the Appleseed renderer
+//
+
+#include "CommonMacros.ds"
+
+{
+    name        appleseed
+    label       "appleseed"
+    parmtag     { spare_opfilter "!!SHOP/PROPERTIES!!" }
+
+    //Extra features for light and cameras
+    parm {
+        name    as_lightsamples
+        label   "Light Samples"
+        parmtag { spare_category "Sampling" }
+        type    int
+        default { 1 }
+        help "Control lightsamples."
+    }
+    parm {
+        name    as_bokehblades
+        label   "AS Bokeh Blades"
+        parmtag { spare_category "Sampling" }
+        type    int
+        default { 0 }
+        help "The number of blades of the bokeh."
+    }
+    parm {
+        name    as_bokehrotation
+        label   "AS Bokeh Rotation"
+        parmtag { spare_category "Sampling" }
+        type    float
+        default { 0 }
+        help "The bokeh rotation."
+    }
+
+
+
+
+
+}
