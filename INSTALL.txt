@@ -32,6 +32,15 @@ Installing houseed:
 
     Make sure there is a , at the line above the one just added.
 
+    * Add the following line to $HH/soho/parameters/SOHOparameters after the line
+     reading: #include "MImi3.6.ds"
+
+    // appleseed
+    #include "appleseed.ds"
+
+    appleseed.ds holds some appleseed specific user parameters (for now only bokeh
+    for the camera and lightsamples for geometry).
+
 - Copy the otl/AppleseedROP.otl to some directory Houdini uses to read digital assets
   from.
 - To use openshadinglanguage shaders copy the osl2otl.py script in bin to $HFS/bin.

@@ -660,14 +660,19 @@ def getMaterial( path, now ):
     global theShaderList
    
     sopnode  = hou.node( path )
-    parent   = sopnode.creator()
-    hou_shop = parent.node( path )
-    hou_shop = hou_shop.path()
+    if sopnode:
+        parent   = sopnode.creator()
+        hou_shop = parent.node( path )
+        hou_shop = hou_shop.path()
 
-    shop = soho.getObject( hou_shop )
-    shopname = shop.getName()
-    if shopname not in theShaderList:
-        theShaderList[shopname] = shop
+        shop = soho.getObject( hou_shop )
+        shopname = shop.getName()
+        if shopname not in theShaderList:
+            theShaderList[shopname] = shop
+    else:
+        shopname = None
+        shop = None
+        soho.warning( "Paths to shaders not found: %s" % path )
 
     return (shopname, shop)
 
@@ -840,7 +845,10 @@ def parseGeoObject( ASobj, now, name ):
 
     # get base path for storing obj files
     (cwd, paths) = getProjectPaths( now )
-    path = paths['as_archivepath']
+    if paths.has_key('as_archivepath'):
+        path = paths['as_archivepath']
+    else:
+        path = cwd
     if os.path.isabs( path ):
         as_archivepath = path
     else:
@@ -855,7 +863,7 @@ def parseGeoObject( ASobj, now, name ):
             # no shops? Then we probably have a material set on the object!
             obj_material_path = ASobj.obj.getDefaultedString('shop_materialpath', now, [''])[0]
             if obj_material_path:
-               (shopname, shop) = getMaterial( obj_material_path, now)
+                (shopname, shop) = getMaterial( obj_material_path, now)
             else:
                 # no shader present
                 shop = None
@@ -878,8 +886,8 @@ def parseGeoObject( ASobj, now, name ):
                 saveObjArchives( timesample, partname )
 
         sys.stdout = save_stdout
-        archives = [ path, filenameList ]
-        partionedObjects[ shopname ] = archives
+        archives = [ path, filenameList, shopname ]
+        partionedObjects[ shopcounter ] = archives
 
     # return dictioanry with shopname and a list containing 
     return ( partionedObjects )
@@ -1026,7 +1034,6 @@ def SetCameraBlur( cam, now ):
     else:
         return False
 
-
 #for some reason evaluating ASPRojectPaths does not work
 #so a slightly more verbose way to get paths
 def getProjectPaths( now ):
@@ -1046,8 +1053,12 @@ def getProjectPaths( now ):
 
     #if paths is not empty, check that paths exist
     for path in searchPaths:
-        if not os.path.exists( searchPaths[path] ):
-            soho.error( 'Directory does not exist: %s' % searchPaths[path] )
+        if os.path.isabs( searchPaths[path] ):
+            if not os.path.exists( searchPaths[path] ):
+                soho.error( 'Directory does not exist: %s' % searchPaths[path] )
+        else:
+            if not os.path.exists( os.path.join( hippath, searchPaths[path] ) ):
+                soho.error( 'Directory does not exist: %s' % os.path.join( hippath, searchPaths[path] ) )
 
     return (hippath, searchPaths)
 
@@ -1283,7 +1294,7 @@ def defineLight( light, now, writer ):
         lightType = 'point_light'
     if lightType == 'distant':
         lightType = 'directional_light'
-    if light.wrangleInt( wrangler, 'coneenable', now, [])[0]:
+    if light.wrangleInt( wrangler, 'coneenable', now, [0])[0]:
         lightType = 'spot_light'
         light_parms['outer_angle'] = light.wrangleFloat( wrangler, 'coneangle', now, [45] )[0]
         light_parms['inner_angle'] = light.wrangleFloat( wrangler, 'conedelta', now, [10] )[0]
@@ -1323,24 +1334,26 @@ def outputLight( light, now, writer ):
 
 def outputGeometry( ASobj, now, writer ):
     name = '%s-geo' % ASobj.getName()
+    # saved_archives is a dict with a number as key and a list as value
+    # the list contains the path, a list with files, and shadername
     saved_archives = parseGeoObject( ASobj, now, name )
 
-    # shader : objectname
+    # objectname : shader
     instances = {}
     if saved_archives:
         material_count = 0
-        for material in saved_archives:
+        for key in saved_archives:
             objname = name +  '_%s' % material_count
-            instances[ material ] = objname
+            parms   = saved_archives[ key ]
+            instances[ objname ] = parms[2]
             writer.begin_object( objname )
-            path_files = saved_archives[ material ]
-            if len( path_files[1] ) > 1:
+            if len( parms[1] ) > 1:
                 writer.begin_parm( 'filename' )
-                for index, files in enumerate( path_files[1] ):
-                    writer.emit_parm( index, path_files[0] + '/' + files + '.obj' )
+                for index, files in enumerate( parms[1] ):
+                    writer.emit_parm( index, parms[0] + '/' + files + '.obj' )
                 writer.end_parm()
             else:
-                writer.emit_parm( 'filename', path_files[0] + '/' + path_files[1][0] + '.obj' )
+                writer.emit_parm( 'filename', parms[0] + '/' + parms[1][0] + '.obj' )
             writer.end_object()
             material_count += 1
         return ( instances )
@@ -1352,25 +1365,31 @@ def outputGeometry( ASobj, now, writer ):
 def outputGeometryInstance( obj, now, writer ):
     # TODO: this function will be a place holder for
     # future procedural geometry shaders
-    instance = outputGeometry( obj, now, writer )
-    return instance
+    instances = outputGeometry( obj, now, writer )
+    return instances
 
 
-def outputInstances( instances, now, writer ):
-    for ASobj in instances:
-        shopname = instances[ ASobj ].keys()[0]
-        objName  = instances[ ASobj ].values()[0]
-        instName = objName + ".inst"
-        writer.begin_object_instance( instName, objName + ".0" )
-        instanceTransform( ASobj.obj, now, writer )
-        if shopname != None:
-            shopname = "/mat" + shopname
-            writer.emit_assign_material( shopname, 'front', shopname )
-            writer.emit_assign_material( shopname, 'back' , shopname )
-        else:
-            debug = True
-            writer._logger.log_info(" No shader or material on object ")
-        writer.end_object_instance()
+def outputInstances( scene, now, writer ):
+    for ASobj in scene:
+        instances = scene[ASobj]
+        #objName = instances[ ASobj ].keys()[0]
+        #shopName  = instances[ ASobj ].values()[0]
+
+        for geo in instances:
+            objName  = geo
+            shopName = instances[ geo ]
+
+            instName = objName + ".inst"
+            writer.begin_object_instance( instName, objName + ".0" )
+            instanceTransform( ASobj.obj, now, writer )
+            if shopName != None:
+                shopName = "/mat" + shopName
+                writer.emit_assign_material( shopName, 'front', shopName )
+                writer.emit_assign_material( shopName, 'back' , shopName )
+            else:
+                debug = True
+                writer._logger.log_info(" No shader or material on object ")
+            writer.end_object_instance()
 
 
 def instanceSubAssemblies( subs, now, writer ):
