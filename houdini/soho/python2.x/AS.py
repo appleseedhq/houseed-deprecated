@@ -436,6 +436,8 @@ CameraTimeSteps = []
 GeoTimeSteps = []
 SettingDefs = []
 
+# UGLY
+VelocityBlurSamples = []
 
 # object containers
 theShaderList   = {}
@@ -739,20 +741,28 @@ def movePoints( geo, tscale ):
 
 #save as a wavefront obj file VERSION 2, WORKS
 #fix output of appleseed object and object_instances
-def saveObjArchives( geo, name ):
+def saveObjArchives( geo, name, time_sample ):
         print( '#archive created at %s' % time.ctime() )
         print( '#name: %s' % name )
         bounds = geo.globalValue( 'geo:boundingbox' )
-        print( "# bounds: %s" % convertToString( bounds ) ) 
+        print( "# bounds: %s" % convertToString( bounds ) )
+        print( "# time sample at: %s" % time_sample )
         nprims = geo.globalValue( 'geo:primcount' )[0]
         npts   = geo.globalValue( 'geo:pointcount' )[0]
 
-        #write vertices (actually, writing point positions...)
+        #write point positions
         print( "\n# %d vertices" % npts )
         pnt = geo.attribute( 'geo:point', 'P' )
-        for pts in range( npts ):
-            pos = geo.value( pnt, pts )
-            print( "v %f %f %f" % ( pos[0], pos[1], pos[2] ) )
+        v_handle = geo.attribute( 'geo:point', 'v' )
+        if v_handle < 0:
+            for pts in range( npts ):
+                pos = geo.value( pnt, pts )
+                print( "v %f %f %f" % ( pos[0], pos[1], pos[2] ) )
+        else:
+            for pts in range( npts ):
+                pos  = geo.value( pnt, pts )
+                v    = geo.value( v_handle,   pts )
+                print( "v " + "".join( [" %f" % ( pos[i] + v[i] * time_sample ) for i in range( 3 ) ] ) )
 
         #write uv/texture coordinates
         prim_uv = dict()
@@ -807,34 +817,91 @@ def saveObjArchives( geo, name ):
                 print( "f" + "".join( [" %d/%d/%d " % (vtxList[vtx], prim_uv[prim][vtx], nrmList[vtx]) for vtx in range(nvtx)] ) )
 
 
+# appleseed only supports closed polygons at the moment
+# so we only return just them and ignore the rest
+def primTypeIterator( geo ):
+    attr_type  = geo.attribute( 'geo:prim', 'intrinsic:typename' )
+    attr_close = geo.attribute( 'geo:prim', 'geo:primclose' )
+    primcount  = geo.globalValue( 'geo:primcount' )[0]
+
+    #soho.warning( "number: %s" % primcount )
+    for prim in xrange( primcount ):
+        primtype = geo.value( attr_type, prim )[0]
+        # get polygons
+        if primtype == 'Poly':
+            if geo.value( attr_close, prim )[0]:
+                #soho.warning ("LALALALA")
+                yield 'closedpoly'
+            else:
+                #soho.warning( "HIHII" )
+                yield 'openpoly'
+        # everything else
+        else:
+            #soho.warning( "MUAHA" )
+            yield 'nonpoly'
+
+
+def groupByPrimitiveType( geo ):
+    splits = {}
+    #for geo in geolist:
+    groups = geo.partition( 'geo:partlist', geo.attribute( 'geo:prim', 'intrinsic:typename' ) ) #primTypeIterator( geo ) )
+    for key in groups:
+        soho.warning( "%s holds:" % key )
+        soho.warning( "contents: %s" % groups[key] )
+    for key in groups:
+        parsed_obj = splits.get( key, None )
+        if not parsed_obj:
+            splits[key] = [groups[key]]
+        else:
+            parsed_obj.append( groups[key] )
+    #        splits[key].append(groups[key])
+    if splits.has_key('closedpoly'):
+        test = splits['closedpoly']
+        return test
+    else:
+        return None
+
+
 # appleseed only works with wavefront obj format so we
 # need to write the vertices, faces and points to a file
 # and return the filepath for the appleseed object tag
 def parseGeoObject( ASobj, now, name ):
 
-    motion_samples = CameraTimeSteps
-    gblur_samples  = GeoTimeSteps
-    
+    # TODO: get rid of globals
+    gblur_samples = GeoTimeSteps
+    vel_samples   = VelocityBlurSamples
+
     geoList = []
+    time_samples = []
     # velocity or deformation blur
     if ASobj.gblur:
-        for t in gblur_samples:
         # get handle to geometry
-            gdp = SohoGeometry( ASobj.soppath, t )
-            if gdp.Handle >= 0:
-                v_handle = gdp.attribute( 'geo:point', 'v' )
+        gdp = SohoGeometry( ASobj.soppath, now )
+        if gdp.Handle >= 0:
+            v_handle = gdp.attribute( 'geo:point', 'v' )
+            if v_handle >= 0:
+                if gdp.attribProperty( v_handle, 'geo:vectorsize' )[0] != 3:
+                    v_handle = False
                 if v_handle >= 0:
-                    if gdp.attribProperty( v_handle, 'geo:vectorsize' )[0] != 3:
-                        v_handle = False
-                if v_handle:
-                    pass
-                    # TODO: calc geo based on v vector?
-                geoList.append( gdp )
+                    ASobj.vblur = True
+            # we have velocity blur, overrule deformation
+            if v_handle >= 0:
+                for i in range(3):
+                    geoList.append( gdp )
+                time_samples = vel_samples
+            else:
+                for t in gblur_samples:
+                    gdp = SohoGeometry( ASobj.soppath, t )
+                    geoList.append( gdp )
+                time_samples = gblur_samples
     # tranformation blur is set with camera
     else:
         gdp = SohoGeometry( ASobj.soppath, now )
         if gdp.Handle >= 0:
             geoList.append( gdp )
+        time_samples.append( now )
+
+    time_samples = time_samples * 10
 
     if len( geoList ) < 1:
         return False
@@ -875,15 +942,17 @@ def parseGeoObject( ASobj, now, name ):
         filenameList = []
         save_stdout = sys.stdout
         timecounter = 0
+        # enumerate?
         for timesample in partGeo[shoppath]:
             filename = os.path.basename( partname ) + "_%d" % timecounter
             filepath = as_archivepath + '/' + filename + '.obj'
             filenameList.append( filename )
-            timecounter += 1
 
             with open( filepath, 'w' ) as fp:
                 sys.stdout = fp
-                saveObjArchives( timesample, partname )
+                saveObjArchives( timesample, partname, time_samples[ timecounter ] )
+
+            timecounter += 1
 
         sys.stdout = save_stdout
         archives = [ path, filenameList, shopname ]
@@ -973,22 +1042,24 @@ def emitHeader( now, writer ):
 #the other parameters are set on the ROP
 CamMotionParms = [
     SohoParm('allowmotionblur',      'int',    [1],          False),
-    SohoParm('shutter',              'float',  [.5],         False),
-    SohoParm('motionstyle',          'string', ['trailing'], False),
-    SohoParm('geo_motionsamples',    'int',    [1],          False),
     SohoParm('xform_motionsamples',  'int',    [1],          False),
-]
+    SohoParm('geo_motionsamples',    'int',    [1],          False),
+    SohoParm('shutter',              'float',  [.5],         False),
+    SohoParm('shutteroffset',        'float',  [1],          False),
+    SohoParm('motionstyle',          'string', ['trailing'], False)
+   ]
 
 
 def SetCameraBlur( cam, now ):
-    global CameraTimeSteps, GeoTimeSteps, FPSinv
+    global CameraTimeSteps, GeoTimeSteps, FPSinv, VelocityBlurSamples
 
     camlist = cam.evaluate( CamMotionParms, now )
-    allowblur = camlist[0].Value[0]
-    shutter   = camlist[1].Value[0] * FPSinv
-    style     = camlist[2].Value[0]
-    gsteps    = camlist[3].Value[0]
-    xsteps    = camlist[4].Value[0]
+    allowblur     = camlist[0].Value[0]
+    xsteps        = camlist[1].Value[0]
+    gsteps        = camlist[2].Value[0]
+    shutter       = camlist[3].Value[0] * FPSinv
+    shutteroffset = camlist[4].Value[0]
+    style         = camlist[5].Value[0]
 
     if style == 'centered':
         delta = shutter * 0.5
@@ -1028,6 +1099,11 @@ def SetCameraBlur( cam, now ):
             t0 += td
     else:
         GeoTimeSteps.append(now)
+
+    # TODO: get exact time points
+    blurstart = 0.5 * FPSinv * shutteroffset
+    # relative values from NOW
+    VelocityBlurSamples = [ shutter - blurstart, shutter, shutter + ( FPSinv - blurstart ) ]
 
     if allowblur and (gsteps > 1 or xsteps > 1):
         return True
@@ -1358,7 +1434,7 @@ def outputGeometry( ASobj, now, writer ):
             material_count += 1
         return ( instances )
     else:
-        soho.warning( "No geometry returned." )
+        soho.warning( "No geometry returned on object: %s" % ASobj.getName() )
         return False
 
 
@@ -1387,11 +1463,11 @@ def outputInstances( scene, now, writer ):
                 writer.emit_assign_material( shopName, 'front', shopName )
                 writer.emit_assign_material( shopName, 'back' , shopName )
             else:
-                debug = True
-                writer._logger.log_info(" No shader or material on object ")
+                writer.emit_comment(" No shader or material on object ")
             writer.end_object_instance()
 
 
+# sub assemblies are used for geometry with transformation blur or for IPR renders
 def instanceSubAssemblies( subs, now, writer ):
     motion_samples = CameraTimeSteps
 
@@ -1499,6 +1575,7 @@ def Render( cam, now, objectlist, lightlist, writer ):
         (master, subs) = groupBlurObjects( objectlist, now, mblur )
 
         sceneObjs = {}
+        # sub assemblies
         for index, ASobj in enumerate( subs ):
             sub_assem_name = 'sub' + str( index )
             sceneObjs[ sub_assem_name ] = ASobj
@@ -1508,6 +1585,7 @@ def Render( cam, now, objectlist, lightlist, writer ):
             writer.end_assembly()
         instanceSubAssemblies( sceneObjs, now, writer )
 
+        # content of the master assembly
         sceneObjs.clear()
         for ASobj in master:
             sceneObjs[ ASobj ] = outputGeometryInstance( ASobj, now, writer ) 
