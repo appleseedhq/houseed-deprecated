@@ -18,10 +18,9 @@ Copyright 2014 Hans Hoogenboom
 
 import os, sys
 
-#TODO: export of parms????
-#TODO: some sanity checks (does file exist?, does dict already have a certain key)
+# TODO: export/output of parms????
 
-#metadata according to the OSL specification
+# metadata according to the OSL specification
 _shaderTypes = ["surface", "displacement", "light", "volume", "shader"]
 _shaderKeys  = ["name", "label", "type", "help", "url", "value", "page", "widget", "float", "int", "units"]
 _parmWidgets = ["number", "string", "boolean", "checkBox", "popup", "mapper", "filename", "null"]
@@ -54,6 +53,8 @@ def _getKeyValue( st ):
 
 
 def parseOslInfo( compiledShader ):
+    DEBUG = False
+
     try:
         cmd = 'oslinfo -v %s' % compiledShader
         fp = os.popen(cmd, 'r')
@@ -64,27 +65,29 @@ def parseOslInfo( compiledShader ):
     lines = fp.readlines()
     if not lines:
         _error('Missing shader definition for %s' % compiledShader)
+        return False
     count = 0
     shaderDef = lines[ count ]    
     args = shaderDef.split()
 
-    #tempShader stores all the data
+    # tempShader stores all the data
     tempShader = dict()
-    #stores the order in which oslinfo outputs its data
-    #and seperates the parameters from general shader data
+    # stores the order in which oslinfo outputs its data
+    # and separates the parameters from general shader data
     parmlist = list()
     if args[0] not in _shaderTypes:
         _error("Not a valid shader type: %s" % args[0])
+        return False
     else:
         tempShader['type'] = _formatVal( args[0] )
         tempShader['name'] = _formatVal( args[1] ) 
         tempShader['hasMetaData'] = False
         tempShader['hasParmHelp'] = False
         
-    #parse the rest of the file to get parameters
-    #number of entries in lines
+    # parse the rest of the file to get parameters
+    # number of entries in lines
     length = len( lines ) - 1
-    #lines iterator
+    # lines iterator
     count = 1
     while True:
         line = lines[ count ]
@@ -92,15 +95,20 @@ def parseOslInfo( compiledShader ):
             _error( "No more lines to read, invalid shader %s?" % compiledShader )
         args = line.split()
 
-        #find parameter name
-        if args[0] not in ["Default", "metadata:"] or args[0] == "export":
+        # find parameter name
+        if args[0] not in ["Default", "metadata:"]: # or args[0] == "export":
             tempparm = dict()
-            tempparm['name'] = _formatVal( args[0] )
-            tempparm['type'] = _formatVal( args[1] )
+            if len( args ) < 3:
+                tempparm['name'] = _formatVal( args[0] )
+                tempparm['type'] = _formatVal( args[1] )
+            else:
+                tempparm['output'] = True
+                tempparm['name']   = _formatVal( args[0] )
+                tempparm['type']   = _formatVal( args[2] )
             condition = True
             widget = list()
             while condition:
-                #read next line
+                # read next line
                 count += 1
                 if count > length:
                     break
@@ -117,7 +125,7 @@ def parseOslInfo( compiledShader ):
                         widget.append( value )
                 else:
                     condition = False
-                    #move one line back
+                    # move one line back
                     count -= 1
             if len(widget) > 0 and 'widget' not in tempparm:
                 tempparm['widget'] = widget
@@ -125,7 +133,7 @@ def parseOslInfo( compiledShader ):
             parmlist.append(tempparm['name'])
             if 'help' in tempparm:
                 tempShader['hasParmHelp'] = True
-        #we didn't find a parameter yet, so there must be some general stuff
+        # we didn't find a parameter yet, so there must be some general stuff
         else:
             if args[0] == "metadata:":
                 (key, value) = _getKeyValue( line )
@@ -137,6 +145,11 @@ def parseOslInfo( compiledShader ):
            break
         else:
             count += 1
-        #parsed all lines
+        # parsed all lines
     tempShader['parmlist'] = parmlist
+    
+    if DEBUG:
+        for key in tempShader:
+            print( "%s: %s" % ( key, tempShader[key] ) )
+
     return tempShader

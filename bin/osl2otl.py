@@ -1,22 +1,22 @@
 #!/usr/bin/env hython
 
-#osl2otl.py
+# osl2otl.py
 #
-#copyright Hans Hoogenboom 2013
+# copyright Hans Hoogenboom 2013
 #
-#Translation script to create a houdini digital
-#asset from a compiled openshadinglanguage shader 
+# Translation script to create a houdini digital
+# asset from a compiled openshadinglanguage shader 
 
-#TODO:  URL as help
-#       export keyword
-#       output keyword
-#       closure keyword?
+# TODO:  URL as help
+#        export keyword
+#        output keyword
+#        closure keyword?
 
 import sys, os, optparse
 import oslparser, oslds
 
 #----------------------------------------------------------
-#Functions         
+# Functions         
 #----------------------------------------------------------
 
 def error( msg, crash = False ):
@@ -59,7 +59,7 @@ def createDS( shader ):
     except NameError:
         error( "Could not create shader %s." % shader['name'] )
         
-    #basic help section for dialogscript
+    # basic help section for dialogscript
     oslHelp = [
         '#type: node',
         '#content: shop',
@@ -71,35 +71,40 @@ def createDS( shader ):
     if 'help' in shader:
         if len(shader['help']) > 2:
             oslHelp.extend( replaceQuotes( shader['help'] ).split('\n') )
-    #check if we have metadata help on parms
+    # check if we have metadata help on parms
     if shader['hasParmHelp'] == True:
         oslHelp.append('@parameters')
         oslHelp.append('')
 
-    #add shader parameters to dialogscript
+    # add shader parameters to dialogscript
     parmnames = shader['parmlist']
     for name in parmnames:
         parm = shader[name]
-        #create houdini ds parm
+        # check if a parameter name starts with output
+        # get rid of it
+        _name = parm["name"].split()
+        if len( _name ) > 1:
+            print( _name )
+        # create houdini ds parm
         oslParm = oslds.OslParmDS( parm['name'], parm['type'] )
         #set label
         if 'label' in parm:
             oslParm.setlabel( parm['label'] )
-        #get and set values and arraysize
+        # get and set values and arraysize
         parmvalues = parm['value']
         (values, asize) = queryValues( oslParm.Type, parmvalues )
         oslParm.setDefault( values )
         oslParm.setArraySize( asize )
-        #set range on parameter
+        # set range on parameter
         if 'UImin' in parm:
             range_v = [parm['UImin'], parm['UImax']]
             oslParm.setRange( range_v )
-        #set help on parameter
+        # set help on parameter
         if 'help' in parm:
             oslHelp.append('    ' + parm['name'] + ':')
             oslHelp.append('       ' + parm['help'] ) 
             oslParm.setHelp( parm['help'] )
-        #set special ui stuff
+        # set special ui stuff
         if 'widget' in parm:
             if 'mapper' in parm['widget'] or 'popup' in parm['widget']:
                 if 'options' in parm:
@@ -108,23 +113,23 @@ def createDS( shader ):
                     error("No menu entries found: %s" % parm['name'])
             else:
                 oslParm.setUI( parm['widget'], None )
-        #set tab/page of parameter
+        # set tab/page of parameter
         oslParmPage = list()
         if 'page' in parm:
             page = parm['page'].replace('"','',2)
             oslParmPage = page.split('.')
-        #add parm to dialogscript
+        # add parm to dialogscript
         ds.addParm( oslParm, oslParmPage )
     
     if 'label' in shader:
         ds.setLabel( shader['label'] )
     ds.setHelp( oslHelp )
-    #return the shader dialogscript
+    # return the shader dialogscript
     return ds
 
 
 #----------------------------------------------------------
-#Main body
+# Main body
 #----------------------------------------------------------
 
 usage = """%prog [options] [shaderfiles]
@@ -164,7 +169,7 @@ verbose = options.verbose
 for oso in args:
     if verbose:
         print("Processing: %s" % oso)
-    #create ds object
+    # create ds object
     shader = oslparser.parseOslInfo( oso )
     if not shader:
         continue
