@@ -27,9 +27,10 @@ _shaderKeys  = ["name", "label", "type", "help", "url", "value", "page", "widget
 _parmWidgets = ["number", "string", "boolean", "checkBox", "popup", "mapper", "filename", "null"]
 _parmFloat   = ["min", "max", "sensitivity"]
 _parmInteger = ["min", "max", "sensitivity", "digits", "slider"]
+_parmKeyword = ["output"]
 
 
-def _error( msg, crash = False):
+def _error( msg, crash = False ):
     sys.stderr.write( msg )
     sys.stderr.write( '\n' )
     if crash:
@@ -57,7 +58,8 @@ def parseOslInfo( compiledShader ):
         cmd = 'oslinfo -v %s' % compiledShader
         fp = os.popen(cmd, 'r')
     except:
-        _error("No valid shaders found.\n")
+        _error("Invalid shaders in file %s.\n" % compileShader)
+        return False
 
     lines = fp.readlines()
     if not lines:
@@ -138,4 +140,3 @@ def parseOslInfo( compiledShader ):
         #parsed all lines
     tempShader['parmlist'] = parmlist
     return tempShader
-

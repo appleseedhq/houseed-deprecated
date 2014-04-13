@@ -1,28 +1,16 @@
 #!/usr/bin/env hython
 
-"""
-Copyright 2014 Hans Hoogenboom
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-"""
-
 #osl2otl.py
+#
+#copyright Hans Hoogenboom 2013
 #
 #Translation script to create a houdini digital
 #asset from a compiled openshadinglanguage shader 
 
 #TODO:  URL as help
 #       export keyword
+#       output keyword
+#       closure keyword?
 
 import sys, os, optparse
 import oslparser, oslds
@@ -31,34 +19,19 @@ import oslparser, oslds
 #Functions         
 #----------------------------------------------------------
 
-
-def error( msg, fatal=True ):
+def error( msg, crash = False ):
     sys.stderr.write( msg )
     sys.stderr.write( '\n' )
-    if fatal:
-        sys.exit( 1 )
+    if crash:
+        sys.exit(1)
     return False
-         
 
-def usage( msg='' ):
-    print \
-"""
-Usage: osl2otl.py [options] oslfile
 
-This python script parses a compiled openshadinglanguage
-shader and creates an OTL file which allows the shader to
-be accessed in Houdini.
-
-The script uses oslinfo. This program, part of the openshading-
-language, must appear in your path.
-
-Options:
- -l hdafile  Create a Houdini digital asset for a single shader.
- -L otlfile  Add shader to an existing digital asset library.
- -N label    For a single .oso file, specify the label in the menu.
- -C icon     For a single .oso file, specify the icon in the menu.
-"""
-    error( msg, False )
+def checkFiles( args ):
+    for shaderfile in args:
+        reg_file = os.path.isfile( shaderfile )
+        if not reg_file:
+            error( "File does not exist: %s" % shaderfile, True )
 
 
 def queryValues( oslType, st ):
@@ -154,19 +127,31 @@ def createDS( shader ):
 #Main body
 #----------------------------------------------------------
 
-parser = optparse.OptionParser()
+usage = """%prog [options] [shaderfiles]
+osl2otl converts compiled OSL (openshadinglanguage)
+shaders into a HDA or adds it to an existing OTL.
+"""
+
+parser = optparse.OptionParser( usage )
 
 parser.add_option( "-v", action="store_true", dest="verbose", help="Output verbosity." )
 parser.add_option( "-s", action="store_true", dest="source", help="Parse shader source file instead of object file." )
 parser.add_option( "-l", action="store", dest="hdafile", help="Create a Houdini digital asset for a single shader." )
 parser.add_option( "-L", action="store", dest="otlfile", help="Add shader to an existing digital asset library." )
 parser.add_option( "-N", action="store", dest="label", help="For a single .oso file, specify the label in the menu." )
-#parser.add_option( "-m", action="store", dest="meta", help="Do not use metadata from oslinfo but plain output." )
 parser.add_option( "-C", action="store", dest="iconfile", help="For a single .oso file, specify the icon in the menu." )
 parser.add_option( "-n", action="store", dest="shopname", help="For a single .oso file, specify the name in the menu." )
 parser.add_option( "-p", action="store", dest="shoppath", help="For a single .oso file, specify the name in the menu." )
 
 (options, args) = parser.parse_args()
+
+if len( sys.argv[1:] ) == 0:
+    parser.print_help()
+    error( "", True )
+if len( args ) == 0:
+    error( "No shader files specified.", True )
+else:
+    checkFiles(args )
 
 hdaFile = options.hdafile
 otlFile = options.otlfile
@@ -175,13 +160,14 @@ icon    = options.iconfile
 name    = options.shopname
 path    = options.shoppath
 verbose = options.verbose
-#no_meta = options.meta
 
 for oso in args:
     if verbose:
         print("Processing: %s" % oso)
     #create ds object
     shader = oslparser.parseOslInfo( oso )
+    if not shader:
+        continue
     ds = createDS( shader )
     ds.setIcon( icon )
     ds.setName( name )
