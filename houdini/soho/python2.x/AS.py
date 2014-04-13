@@ -886,7 +886,9 @@ def parseGeoObject( ASobj, now, name ):
                     ASobj.vblur = True
             # we have velocity blur, overrule deformation
             if v_handle >= 0:
-                for i in range(3):
+                # TODO: more graciously handle the velocity blur samples
+                # appleseed requires samples^2 samples
+                for i in range(4):
                     geoList.append( gdp )
                 time_samples = vel_samples
             else:
@@ -1103,7 +1105,7 @@ def SetCameraBlur( cam, now ):
     # TODO: get exact time points
     blurstart = 0.5 * FPSinv * shutteroffset
     # relative values from NOW
-    VelocityBlurSamples = [ shutter - blurstart, shutter, shutter + ( FPSinv - blurstart ) ]
+    VelocityBlurSamples = [ shutter - blurstart, shutter, shutter, shutter + ( FPSinv - blurstart ) ]
 
     if allowblur and (gsteps > 1 or xsteps > 1):
         return True
