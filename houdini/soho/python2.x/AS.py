@@ -30,6 +30,7 @@ Copyright 2014 Hans Hoogenboom
 
 import os
 import sys
+import subprocess
 
 
 class AsLogger( object):
@@ -116,6 +117,9 @@ class AsProjectFileWriter( object):
         self._emit_text( '</%s>\n' % name)
         self._logger.log_debug( 'end tag %s\n' % name)
         self._inside_tag = None
+
+    def close_project_file( self):
+        self._file.close()
 
     #
     # general appleseed tags
@@ -1694,9 +1698,32 @@ def main():
 
     Render( cam, now, soho.objectList('objlist:instance'), soho.objectList('objlist:light'), writer )
 
-    # Bye!
+    # finish project file!
     writer.emit_comment( 'Script generation time %g seconds' % (time.time() - clockstart) )
+    writer.close_project_file()
+
+
+    # completely untested...
+    '''
+    render_mode = soho.getDefaultedInt( 'as_render_mode', [''] )[0]
+
+    # call appleseed.cli if needed.
+    if render_mode == 0: # render & export
+        file_type = soho.getDefaultedInt( 'as_filetype', [''] )[0]
     
+        cmd = ['appleseed.cli']
+
+        if file_type == 0: # mplay
+            cmd.append( '--mplay' )
+            cmd.append( filename )
+        else:
+            cmd.append( filename )
+            img_file_name = soho.getDefaultedString( 'as_filename', [''] )[0]
+            cmd.append( ' -o ' + img_file_name)
+
+        sys.__stdout__.write(  ' '.join( cmd ) )
+        subprocess.Popen( cmd)
+    '''
 
 #
 # call our entry point!
