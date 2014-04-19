@@ -476,10 +476,10 @@ ASConfigSettings = {
     #lighting
     'lighting_engine' : soho.getDefaultedString( 'as_lighting_engine', [''] )[0],
     #system
-    'override_cpu'       : soho.getDefaultedInt( 'override_cpu', [''] )[0],
-    'rendering_threads'  : soho.getDefaultedInt( 'as_rendering_threads', [''] )[0],
-    'override_mem'       : soho.getDefaultedInt( 'override_mem', [''], )[0],
-    'texture_cache_size' : soho.getDefaultedInt( 'as_texture_cache_size', [''] )[0]
+    'override_threads'      : soho.getDefaultedInt( 'override_threads', [''] )[0],
+    'rendering_threads'     : soho.getDefaultedInt( 'as_rendering_threads', [''] )[0],
+    'override_texture_mem'  : soho.getDefaultedInt( 'override_texture_mem', [''], )[0],
+    'texture_cache_size'    : soho.getDefaultedInt( 'as_texture_cache_size', [''] )[0]
 }
 
 #Sub config settings for Appleseed
@@ -1308,7 +1308,7 @@ def defineCamera( cam, now, writer ):
     #get image resolution
     resolution = cam.wrangleInt( wrangler, 'res', now, [256, 256] )
     #does appleseed support clipping planes?
-    if cam.wrangleInt( wrangler, 'override_camerares', now, [0] )[0]:
+    if cam.wrangleInt( wrangler, 'override_cameras', now, [0] )[0]:
         resolution = cam.wrangleInt( wrangler, 'res_override', now, resolution )
     outputParms['resolution'] = convertToString( resolution )
 
